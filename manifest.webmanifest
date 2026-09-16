@@ -1,0 +1,9 @@
+{
+  "name": "Abenteurergilde",
+  "short_name": "Gilde",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#ead8ad",
+  "theme_color": "#2d2114",
+  "description": "Abenteurergilde – Idle / Incremental Game"
+}
