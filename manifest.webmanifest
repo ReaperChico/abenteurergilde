@@ -1,7 +1,7 @@
 {
-  "name": "Abenteurergilde – Das Gildenreich",
+  "name": "Abenteurergilde – Smart-Gildenmanager",
   "short_name": "Abenteurergilde",
-  "description": "Langzeit-Idle-/Incremental-Game rund um eine wachsende Abenteurergilde.",
+  "description": "Abenteurergilde v4.1 – intelligentes Idle-/Incremental-Game.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
