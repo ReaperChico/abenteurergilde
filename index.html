@@ -56,7 +56,6 @@ button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-vis
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Abenteurergilde">
-
 </head><body><div class="app">
 <header class="topbar">
   <div class="brand"><div class="crest">⚔️</div><div><h1>Abenteurergilde</h1><small id="guildRankTop">Langzeit-Idle · Legende 0</small></div></div>
@@ -166,7 +165,7 @@ button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-vis
   <div class="section" style="margin-top:13px"><div class="sectionHeader"><div><h2>Gefahrenzone</h2><p>Setzt nur den aktiven Slot zurück.</p></div></div><button type="button" class="dangerBtn" id="hardReset">Aktuellen Spielstand vollständig löschen</button></div>
 </section>
 </main>
-<div class="footer">v3 · automatische Speicherung alle 5 Sekunden · Forschung und Offline-Fortschritt laufen auch bei geschlossenem Spiel · v2-Spielstände werden automatisch migriert</div>
+<div class="footer">v3.2 · automatische Speicherung alle 5 Sekunden · Forschung und Offline-Fortschritt laufen auch bei geschlossenem Spiel · v2-Spielstände werden automatisch migriert</div>
 </div>
 <div id="toastWrap" class="toastWrap" aria-live="polite"></div>
 <div id="offlineModal" class="modalBackdrop"><div class="modal"><h2>Willkommen zurück!</h2><p id="offlineText"></p><div class="modalActions"><button type="button" class="buyBtn" id="offlineClose">Weiter</button></div></div></div>
@@ -176,15 +175,96 @@ button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-vis
 <div id="resetModal" class="modalBackdrop"><div class="modal"><h2>Spielstand wirklich löschen?</h2><p>Diese Aktion kann nicht rückgängig gemacht werden.</p><div class="field"><label for="resetConfirmInput">Tippe <strong>LÖSCHEN</strong>:</label><input id="resetConfirmInput" type="text"></div><div class="modalActions"><button type="button" class="miniBtn" id="resetCancel">Abbrechen</button><button type="button" class="dangerBtn" id="resetConfirm">Endgültig löschen</button></div></div></div>
 <script>(()=>{
 "use strict";
-const VERSION=3, BASE_KEY="abenteurergilde_idle_v3_slot", ACTIVE_SLOT_KEY="abenteurergilde_idle_v3_active_slot", V2_KEY="abenteurergilde_idle_v2_slot", V2_ACTIVE="abenteurergilde_idle_v2_active_slot", V1_KEY="abenteurergilde_idle_v1";
+const VERSION=3.2, BASE_KEY="abenteurergilde_idle_v3_slot", ACTIVE_SLOT_KEY="abenteurergilde_idle_v3_active_slot", V2_KEY="abenteurergilde_idle_v2_slot", V2_ACTIVE="abenteurergilde_idle_v2_active_slot", V1_KEY="abenteurergilde_idle_v1";
 const SAVE_MS=5000, BASE_QUEST_COOLDOWN=5000, COST_GROWTH_BASE=1.14, OFFLINE_BASE=.50, MAX_OFFLINE_BASE_HOURS=12;
 const __memoryStorage=Object.create(null);
 let storageAvailable=true;
 const safeStorage={
   getItem(key){try{return window.localStorage.getItem(key)}catch(e){storageAvailable=false;return Object.prototype.hasOwnProperty.call(__memoryStorage,key)?__memoryStorage[key]:null}},
-  setItem(key,value){const v=String(value);try{window.safeStorage.setItem(key,v)}catch(e){storageAvailable=false;__memoryStorage[key]=v}},
-  removeItem(key){try{window.safeStorage.removeItem(key)}catch(e){storageAvailable=false;delete __memoryStorage[key]}}
+  setItem(key,value){const v=String(value);try{window.localStorage.setItem(key,v)}catch(e){storageAvailable=false;__memoryStorage[key]=v}},
+  removeItem(key){try{window.localStorage.removeItem(key)}catch(e){storageAvailable=false;delete __memoryStorage[key]}}
 };
+let idbAvailable = "indexedDB" in window;
+const IDB_NAME = "abenteurergilde_idle_v3_db";
+const IDB_STORE = "saves";
+
+function openSaveDB(){
+  return new Promise((resolve,reject)=>{
+    if(!idbAvailable){reject(new Error("IndexedDB nicht verfügbar"));return}
+    let req;
+    try{ req=indexedDB.open(IDB_NAME,1); }
+    catch(e){ idbAvailable=false; reject(e); return; }
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      if(!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+    };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>{idbAvailable=false;reject(req.error||new Error("IndexedDB Fehler"))};
+    req.onblocked=()=>reject(new Error("IndexedDB blockiert"));
+  });
+}
+async function idbGet(key){
+  try{
+    const db=await openSaveDB();
+    return await new Promise((resolve,reject)=>{
+      const tx=db.transaction(IDB_STORE,"readonly");
+      const req=tx.objectStore(IDB_STORE).get(key);
+      req.onsuccess=()=>resolve(req.result??null);
+      req.onerror=()=>reject(req.error);
+      tx.oncomplete=()=>db.close();
+    });
+  }catch(e){idbAvailable=false;return null}
+}
+async function idbSet(key,value){
+  try{
+    const db=await openSaveDB();
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction(IDB_STORE,"readwrite");
+      tx.objectStore(IDB_STORE).put(String(value),key);
+      tx.oncomplete=()=>resolve();
+      tx.onerror=()=>reject(tx.error);
+      tx.onabort=()=>reject(tx.error);
+    });
+    db.close();
+    return true;
+  }catch(e){idbAvailable=false;return false}
+}
+async function idbRemove(key){
+  try{
+    const db=await openSaveDB();
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction(IDB_STORE,"readwrite");
+      tx.objectStore(IDB_STORE).delete(key);
+      tx.oncomplete=()=>resolve();
+      tx.onerror=()=>reject(tx.error);
+    });
+    db.close();
+    return true;
+  }catch(e){idbAvailable=false;return false}
+}
+function extractLastSave(raw){
+  if(!raw) return 0;
+  try{return Number(JSON.parse(raw)?.lastSave)||0}catch(e){return 0}
+}
+async function synchronizePersistentSaves(){
+  const idbActive = await idbGet(ACTIVE_SLOT_KEY);
+  const localActive = safeStorage.getItem(ACTIVE_SLOT_KEY);
+  if(!localActive && idbActive) safeStorage.setItem(ACTIVE_SLOT_KEY,idbActive);
+
+  for(let slot=1;slot<=3;slot++){
+    const key=BASE_KEY+slot;
+    const localRaw=safeStorage.getItem(key);
+    const idbRaw=await idbGet(key);
+    const localTime=extractLastSave(localRaw);
+    const idbTime=extractLastSave(idbRaw);
+
+    if(idbRaw && (!localRaw || idbTime>localTime)){
+      safeStorage.setItem(key,idbRaw);
+    } else if(localRaw && (!idbRaw || localTime>=idbTime)){
+      await idbSet(key,localRaw);
+    }
+  }
+}
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const clamp=(n,a,b)=>Math.min(b,Math.max(a,n)), clampInt=(n,a,b)=>Math.floor(clamp(Number(n)||0,a,b)), rand=(a,b)=>a+Math.random()*(b-a);
 
@@ -443,13 +523,27 @@ function applyTheme(){document.body.classList.toggle("dark",!!state.settings.dar
 function migrate(raw,slot){const fresh=defaultState(slot);if(!raw)return fresh;const s={...fresh,...raw,slot,version:VERSION,stats:{...fresh.stats,...(raw.stats||{})},settings:{...fresh.settings,...(raw.settings||{})},auto:{...fresh.auto,...(raw.auto||{})},legend:{...fresh.legend,...(raw.legend||{})},upgrades:{...fresh.upgrades,...(raw.upgrades||{})},research:{...fresh.research,...(raw.research||{})},market:{...fresh.market,...(raw.market||{})}};s.adventurers=Array.isArray(raw.adventurers)?raw.adventurers.slice(0,ADVENTURERS.length):fresh.adventurers;while(s.adventurers.length<ADVENTURERS.length)s.adventurers.push(0);s.runMaxOwned=Array.isArray(raw.runMaxOwned)?raw.runMaxOwned.slice(0,ADVENTURERS.length):s.adventurers.slice();while(s.runMaxOwned.length<ADVENTURERS.length)s.runMaxOwned.push(0);s.mastery=Array.isArray(raw.mastery)?raw.mastery.slice(0,ADVENTURERS.length):fresh.mastery;while(s.mastery.length<ADVENTURERS.length)s.mastery.push(0);s.breakthroughs=Array.isArray(raw.breakthroughs)?raw.breakthroughs.slice(0,ADVENTURERS.length):fresh.breakthroughs;while(s.breakthroughs.length<ADVENTURERS.length)s.breakthroughs.push(false);s.classUpgrades=Array.isArray(raw.classUpgrades)?raw.classUpgrades.map(r=>Array.isArray(r)?r.slice(0,CLASS_UPGRADES.length):Array(CLASS_UPGRADES.length).fill(false)):fresh.classUpgrades;while(s.classUpgrades.length<ADVENTURERS.length)s.classUpgrades.push(Array(CLASS_UPGRADES.length).fill(false));s.classUpgrades=s.classUpgrades.map(r=>{while(r.length<CLASS_UPGRADES.length)r.push(false);return r});s.auto.customClasses=Array.isArray(s.auto.customClasses)?s.auto.customClasses.slice(0,ADVENTURERS.length):fresh.auto.customClasses;while(s.auto.customClasses.length<ADVENTURERS.length)s.auto.customClasses.push(true);s.globalUpgrades=Array.isArray(raw.globalUpgrades)?raw.globalUpgrades.filter(id=>GLOBAL_UPGRADES.some(g=>g.id===id)):[];s.achievements=Array.isArray(raw.achievements)?raw.achievements.filter(id=>ACHIEVEMENTS.some(a=>a.id===id)):[];s.history=Array.isArray(raw.history)?raw.history.slice(0,30):[];s.questLog=Array.isArray(raw.questLog)?raw.questLog.slice(0,40):[];s.automationLog=Array.isArray(raw.automationLog)?raw.automationLog.slice(0,40):[];s.challengeCompletions=Array.isArray(raw.challengeCompletions)?raw.challengeCompletions:[];if(!s.runMissions?.length)s.runMissions=makeRunMissions();if(!s.runModifier)s.runModifier=randomModifier();if(!s.runStartedAt)s.runStartedAt=Date.now();return s}
 function runOfflineProgress(s,lastSave){const away=Math.min(maxOfflineHours(s)*3600,Math.max(0,(Date.now()-lastSave)/1000));if(away<10)return null;const eff=offlineEfficiency(s),gold=goldPerSecondFor(s)*away*eff,rep=passiveRepPerSecond(s)*away*eff;addGold(gold,s);addRep(rep,s);s.stats.offlineGold+=gold;return{away,gold,rep,eff}}
 function loadSlot(slot){let raw=null;try{raw=JSON.parse(safeStorage.getItem(BASE_KEY+slot))}catch(e){}if(!raw){try{raw=JSON.parse(safeStorage.getItem(V2_KEY+slot))}catch(e){}}if(!raw&&slot===1){try{raw=JSON.parse(safeStorage.getItem(V1_KEY))}catch(e){}}const s=migrate(raw,slot),last=raw?.lastSave||Date.now(),offline=runOfflineProgress(s,last);if(s.research.active&&Date.now()>=s.research.active.endsAt){const id=s.research.active.id;if(!s.research.completed.includes(id))s.research.completed.push(id);s.research.active=null}s.lastSave=Date.now();if(offline)setTimeout(()=>{$("#offlineText").innerHTML=`Du warst <strong>${formatDuration(offline.away)}</strong> fort.<br><br>Effizienz: <strong>${(offline.eff*100).toFixed(1)}%</strong><br>💰 +<strong>${formatNumber(offline.gold)}</strong><br>⭐ +<strong>${formatNumber(offline.rep)}</strong><br><br>Forschung wurde ebenfalls anhand der echten Zeit fortgeführt.`;$("#offlineModal").classList.add("show")},150);return s}
-function saveGame(){state.lastSave=Date.now();safeStorage.setItem(BASE_KEY+activeSlot,JSON.stringify(state));safeStorage.setItem(ACTIVE_SLOT_KEY,String(activeSlot));if($("#saveStatus"))$("#saveStatus").textContent=storageAvailable?`Slot ${activeSlot} · gespeichert ${new Date().toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}`:`Slot ${activeSlot} · Vorschau-Modus: permanentes Speichern hier nicht verfügbar`}
+function saveGame(){
+  state.lastSave=Date.now();
+  const payload=JSON.stringify(state);
+  safeStorage.setItem(BASE_KEY+activeSlot,payload);
+  safeStorage.setItem(ACTIVE_SLOT_KEY,String(activeSlot));
+  idbSet(BASE_KEY+activeSlot,payload);
+  idbSet(ACTIVE_SLOT_KEY,String(activeSlot));
+  if($("#saveStatus")){
+    const time=new Date().toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+    if(storageAvailable&&idbAvailable) $("#saveStatus").textContent=`Slot ${activeSlot} · doppelt gespeichert ${time} · localStorage + IndexedDB`;
+    else if(storageAvailable) $("#saveStatus").textContent=`Slot ${activeSlot} · gespeichert ${time} · localStorage`;
+    else if(idbAvailable) $("#saveStatus").textContent=`Slot ${activeSlot} · gespeichert ${time} · IndexedDB`;
+    else $("#saveStatus").textContent=`Slot ${activeSlot} · nur temporärer Speicher – bitte als HTTPS-Web-App öffnen`;
+  }
+}
 function exportSave(){saveGame();$("#saveTransfer").value=btoa(unescape(encodeURIComponent(JSON.stringify(state))));$("#saveTransfer").select();toast("Export-Code erstellt.")}
 function importSave(){try{const raw=JSON.parse(decodeURIComponent(escape(atob($("#saveTransfer").value.trim()))));state=migrate(raw,activeSlot);saveGame();renderAll();toast("Spielstand importiert.",true)}catch(e){toast("Import fehlgeschlagen.")}}
 function switchSlot(slot){saveGame();activeSlot=clampInt(slot,1,3);state=loadSlot(activeSlot);renderAll();toast(`Spielstand ${activeSlot} geladen.`)}
-function hardResetConfirmed(){if($("#resetConfirmInput").value.trim().toUpperCase()!=="LÖSCHEN"){toast("Bestätigung stimmt nicht.");return}safeStorage.removeItem(BASE_KEY+activeSlot);state=defaultState(activeSlot);saveGame();$("#resetModal").classList.remove("show");$("#resetConfirmInput").value="";renderAll()}
+function hardResetConfirmed(){if($("#resetConfirmInput").value.trim().toUpperCase()!=="LÖSCHEN"){toast("Bestätigung stimmt nicht.");return}safeStorage.removeItem(BASE_KEY+activeSlot);idbRemove(BASE_KEY+activeSlot);state=defaultState(activeSlot);saveGame();$("#resetModal").classList.remove("show");$("#resetConfirmInput").value="";renderAll()}
 
-let activeSlot=clampInt(Number(safeStorage.getItem(ACTIVE_SLOT_KEY)||safeStorage.getItem(V2_ACTIVE)||1),1,3),state=loadSlot(activeSlot),lastTick=performance.now(),saveAcc=0,renderAcc=0,autoAcc=0;
+let activeSlot=1,state=defaultState(1),lastTick=performance.now(),saveAcc=0,renderAcc=0,autoAcc=0;
 function switchTab(tab){$$('.tabBtn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));$$('.tab').forEach(t=>t.classList.toggle('active',t.id===`tab-${tab}`))}
 function tick(now){const dt=Math.min(1,(now-lastTick)/1000);lastTick=now;researchCompleteCheck();updateGoldenQuest();updateEconomy();addGold(goldPerSecondFor()*dt);addRep(passiveRepPerSecond()*dt);state.stats.playTime+=dt;const gps=goldPerSecondFor();state.stats.maxGps=Math.max(state.stats.maxGps,gps);state.stats.bestRunGps=Math.max(state.stats.bestRunGps,gps);for(let i=0;i<state.adventurers.length;i++)state.runMaxOwned[i]=Math.max(state.runMaxOwned[i],state.adventurers[i]);checkRunMissions();saveAcc+=dt*1000;renderAcc+=dt*1000;autoAcc+=dt*1000;if(autoAcc>=1000){doAutomation();autoAcc=0}if(renderAcc>=700){renderTop();renderGoal();renderAdventurers();renderGuild();renderQuest();renderStrategy();renderResearch();renderPrestige();checkAchievements();renderAcc=0}if(saveAcc>=SAVE_MS){saveGame();saveAcc=0}requestAnimationFrame(tick)}
 
@@ -466,8 +560,31 @@ for(const [id,key] of [["autoStrategy","strategy"],["autoBuyMode","buyMode"],["a
 for(const [id,key,min,max] of [["reservePct","reservePct",0,95],["spendCapPct","spendCapPct",5,100],["budgetAdv","budgetAdv",0,100],["budgetBuild","budgetBuild",0,100],["budgetClass","budgetClass",0,100],["budgetEdict","budgetEdict",0,100],["autoPrestigeMinutes","prestigeMinutes",0,1440]])$("#"+id).addEventListener('change',e=>{state.auto[key]=clamp(Number(e.target.value)||0,min,max);renderSettings();saveGame()});$("#autoPrestigeRatio").addEventListener('change',e=>{state.auto.prestigeRatio=Number(e.target.value);saveGame()});$$('[data-preset]').forEach(b=>b.addEventListener('click',()=>applyPreset(b.dataset.preset)));
 $("#darkToggle").addEventListener('change',e=>{state.settings.dark=e.target.checked;applyTheme();saveGame()});$("#compactToggle").addEventListener('change',e=>{state.settings.compact=e.target.checked;applyTheme();saveGame()});$("#soundToggle").addEventListener('change',e=>{state.settings.sound=e.target.checked;saveGame()});$("#reduceMotionToggle").addEventListener('change',e=>{state.settings.reduceMotion=e.target.checked;applyTheme();saveGame()});
 $("#saveSlot").addEventListener('change',e=>switchSlot(e.target.value));$("#manualSave").addEventListener('click',()=>{saveGame();toast("Spielstand gespeichert.")});$("#exportSave").addEventListener('click',exportSave);$("#importSave").addEventListener('click',importSave);$("#hardReset").addEventListener('click',()=>$("#resetModal").classList.add('show'));$("#resetCancel").addEventListener('click',()=>$("#resetModal").classList.remove('show'));$("#resetConfirm").addEventListener('click',hardResetConfirmed);
-window.addEventListener('beforeunload',saveGame);document.addEventListener('visibilitychange',()=>{if(document.hidden)saveGame()});
-applyTheme();$$('[data-buy-mode]').forEach(b=>b.classList.toggle('active',b.dataset.buyMode===state.buyMode));$$('[data-build-mode]').forEach(b=>b.classList.toggle('active',b.dataset.buildMode===state.buildBuyMode));$("#adventurerSort").value=state.adventurerSort;renderAll();if(!storageAvailable)setTimeout(()=>toast("Vorschau-Modus: Das Spiel läuft hier ohne dauerhaftes Speichern. Für permanente Saves die HTML-Datei lokal im Browser öffnen."),300);requestAnimationFrame(tick);
+window.addEventListener('beforeunload',saveGame);
+window.addEventListener('pagehide',saveGame);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)saveGame()});
+document.addEventListener('freeze',saveGame);
+async function bootstrapGame(){
+  await synchronizePersistentSaves();
+  activeSlot=clampInt(Number(safeStorage.getItem(ACTIVE_SLOT_KEY)||safeStorage.getItem(V2_ACTIVE)||1),1,3);
+  state=loadSlot(activeSlot);
+  lastTick=performance.now();
+
+  applyTheme();
+  $$('[data-buy-mode]').forEach(b=>b.classList.toggle('active',b.dataset.buyMode===state.buyMode));
+  $$('[data-build-mode]').forEach(b=>b.classList.toggle('active',b.dataset.buildMode===state.buildBuyMode));
+  $("#adventurerSort").value=state.adventurerSort;
+  renderAll();
+  saveGame();
+
+  if(!storageAvailable && !idbAvailable){
+    setTimeout(()=>toast("Achtung: Dieser Öffnungsmodus erlaubt keinen dauerhaften Spielstand. Bitte die HTTPS-Web-App in Safari verwenden.",true),300);
+  } else if(idbAvailable){
+    setTimeout(()=>toast("💾 Mobiler Doppelspeicher aktiv: localStorage + IndexedDB."),450);
+  }
+  requestAnimationFrame(tick);
+}
+bootstrapGame();
 })();</script>
 <script>
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
@@ -476,5 +593,4 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   });
 }
 </script>
-
 </body></html>

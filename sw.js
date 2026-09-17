@@ -1,4 +1,4 @@
-const CACHE = 'abenteurergilde-v3-1';
+const CACHE = 'abenteurergilde-v3-2';
 const ASSETS = ['./', './index.html', './manifest.webmanifest'];
 
 self.addEventListener('install', event => {
