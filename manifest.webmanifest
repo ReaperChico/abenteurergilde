@@ -1,9 +1,22 @@
 {
-  "name": "Abenteurergilde",
-  "short_name": "Gilde",
+  "name": "Abenteurergilde – Das Gildenreich",
+  "short_name": "Abenteurergilde",
+  "description": "Langzeit-Idle-/Incremental-Game rund um eine wachsende Abenteurergilde.",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#ead8ad",
   "theme_color": "#2d2114",
-  "description": "Abenteurergilde – Idle / Incremental Game"
+  "icons": [
+    {
+      "src": "icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
 }
