@@ -1,20 +1,20 @@
 {
-  "name": "Abenteurergilde – Smart-Gildenmanager",
+  "name": "Abenteurergilde – Gilden-KI 2.0",
   "short_name": "Abenteurergilde",
-  "description": "Abenteurergilde v4.1 – intelligentes Idle-/Incremental-Game.",
+  "description": "Langzeit-Idle-/Incremental-Game rund um eine intelligente Abenteurergilde.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#ead8ad",
+  "background_color": "#eadcb8",
   "theme_color": "#2d2114",
   "icons": [
     {
-      "src": "icon-180.png",
+      "src": "./icon-180.png",
       "sizes": "180x180",
       "type": "image/png"
     },
     {
-      "src": "icon-512.png",
+      "src": "./icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }
